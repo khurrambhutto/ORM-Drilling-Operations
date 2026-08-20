@@ -1,0 +1,50 @@
+/* ======================
+   MODULAR CSS IMPORTS
+   Main CSS file that imports all component stylesheets
+   ====================== */
+
+/* Base styles - Typography, global resets */
+@import './styles/base.css';
+
+/* Layout - Containers, grid systems, dashboard layout */
+@import './styles/layout.css';
+
+/* Components - Buttons, cards, form elements */
+@import './styles/components.css';
+
+/* Tables - Table styling and form controls */
+@import './styles/tables.css';
+
+/* Charts - Chart containers, graph styling */
+@import './styles/charts.css';
+
+/* Well Details - Well detail view specific styles */
+@import './styles/well-details.css';
+
+/* Animations - Keyframes, transitions, hover effects */
+@import './styles/animations.css';
+
+/* Responsive - Media queries and responsive design */
+@import './styles/responsive.css';
+
+/* 
+   ======================
+   FILE ORGANIZATION GUIDE
+   ======================
+   
+   base.css - Global styles, typography, theme variables
+   layout.css - Dashboard layout, containers, grid systems  
+   components.css - Reusable components (buttons, cards, badges)
+   tables.css - Table styling, form controls, selects
+   charts.css - Chart containers, graph styling, recharts
+   well-details.css - Well detail view specific styles
+   animations.css - Keyframes, transitions, hover effects
+   responsive.css - Media queries and responsive design
+   
+   This modular approach makes it easier to:
+   - Find and edit specific component styles
+   - Maintain consistent styling across components
+   - Add new features without cluttering the main file
+   - Debug CSS issues by narrowing down to specific files
+   - Collaborate with team members on different UI sections
+*/

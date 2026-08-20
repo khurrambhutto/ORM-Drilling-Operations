@@ -1,0 +1,59 @@
+/* ======================
+   BASE STYLES & TYPOGRAPHY
+   ====================== */
+
+/* Global Reset */
+body, html {
+  margin: 0;
+  padding: 0;
+  background-color: #081a33; /* darkest navy */
+}
+
+/* Base App Styling */
+.App {
+  text-align: center;
+  font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+  background: #081a33;
+  min-height: 100vh;
+  padding: 0; /* remove extra padding that created side gutters */
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Enhanced Typography */
+h1, h2, h3 {
+  color: white;
+  margin-bottom: 16px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  color: white;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+h2 {
+  font-size: 2.5rem;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 2rem;
+  font-weight: 500;
+}
+
+/* Legacy h1, h2 override */
+h1, h2 {
+  color: white;
+  margin-bottom: 16px;
+}
+
+/* Page Theme */
+body {
+  background: #0B1328; /* align with landing */
+  color: #e0e0e0;
+  font-family: 'Segoe UI', sans-serif;
+}

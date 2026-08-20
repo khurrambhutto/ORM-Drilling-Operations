@@ -1,0 +1,90 @@
+/* ======================
+   CHARTS & GRAPHS
+   ====================== */
+
+/* Chart Card Styling */
+.chart-card {
+  background-color: #0e1e46;
+  padding: 20px;
+  margin: 15px;
+  border-radius: 16px;
+  color: white;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  border: 2px solid #2a5bd7;
+}
+
+.chart-card:hover {
+  transform: translateY(-4px);
+  border: 2px solid #5294ff;
+  background-color: #13214a;
+  box-shadow: 0 0 12px rgba(82, 148, 255, 0.3);
+}
+
+/* Individual Well Chart Container */
+.well-chart-container {
+  background-color: #0e1b33; /* dark navy to match cards */
+  color: white;
+  border: 1px solid #2a5bd7;
+  border-radius: 15px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s ease;
+  margin: 15px; /* Balanced margin for spacing */
+  position: relative;
+  z-index: 1;
+  overflow: visible; /* Ensure borders are never clipped */
+  min-width: 280px; /* Minimum width for proper chart display */
+}
+
+.well-chart-container:hover {
+  transform: translateY(-2px); /* Reduced movement to prevent clipping */
+  box-shadow: 0 4px 12px rgba(82, 148, 255, 0.3);
+  border: 2px solid #5294ff; /* Slightly thicker border on hover */
+  z-index: 10; /* Bring to front on hover */
+}
+
+/* Recharts Specific Styling */
+.well-chart-container:hover .recharts-wrapper {
+  /* Subtle scale to avoid border clipping */
+  transform: scale(1.01);
+  transition: transform 0.3s ease;
+}
+
+.well-chart-container .recharts-wrapper {
+  overflow: visible;
+}
+
+.well-chart-container .recharts-surface {
+  overflow: visible;
+}
+
+/* General Notes Section */
+.general-notes {
+  background-color: #0e1e46;
+  padding: 25px;
+  margin: 20px auto;
+  border-radius: 12px;
+  color: white;
+  width: 90%;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1.6;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* General Notes Box */
+.general-notes-box {
+  background-color: #0e1b33; /* same dark navy */
+  color: white;
+  padding: 20px;
+  border-radius: 15px;
+  border: 1px solid #2d3e50;
+  margin-top: 30px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.general-notes-box:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}

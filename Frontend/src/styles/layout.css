@@ -1,0 +1,52 @@
+/* ======================
+   LAYOUT & CONTAINERS
+   ====================== */
+
+/* Dashboard Container */
+.dashboard-container {
+  background-color: #0e2447; /* dark blue background for main content */
+  padding: 20px; /* Reduced padding from 50px */
+  border-radius: 12px;
+  box-shadow: none;
+  margin: 0; /* make it fill width */
+  max-width: 100%; /* full width */
+  color: white;
+  min-height: 100vh;
+  overflow: visible; /* Added to prevent any clipping */
+}
+
+/* Dashboard Title */
+/* old .dashboard-title kept for back-compat but not used, reduce size and spacing */
+.dashboard-title { display: none; }
+
+/* Well Container Layout */
+.well-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 30px; /* Increased gap from 24px */
+  padding: 30px; /* Increased padding from 20px */
+  margin: 20px 0; /* Added margin for extra space */
+  overflow: visible; /* Prevent any clipping */
+}
+
+/* Well Grid Layout */
+.well-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+
+/* Chart Container Styling */
+.chart-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 35px; /* Increased gap significantly */
+  margin-bottom: 50px; /* Increased bottom margin */
+  padding: 30px; /* Significantly increased padding */
+  overflow: visible; /* Ensure child elements can extend beyond container */
+  min-height: 400px; /* Added minimum height to provide more space */
+  width: 100%; /* Ensure full width utilization */
+}

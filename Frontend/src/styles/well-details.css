@@ -1,0 +1,71 @@
+/* ======================
+   WELL DETAIL VIEW
+   ====================== */
+
+/* Well Detail View Main Container */
+.well-detail-view {
+  background-color: #0F1D3B; /* Dark blue background */
+  color: white; /* White text */
+  min-height: 100vh;
+  padding: 20px;
+}
+
+/* Well Detail Container */
+.well-detail-container {
+  background-color: #0F1D3B; /* Dark blue background */
+  color: white; /* White text */
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px;
+  border-radius: 12px;
+}
+
+/* Well Detail Header */
+.well-detail-header {
+  background-color: #0F1D3B; /* Dark blue background */
+  color: white; /* White text */
+  margin-bottom: 30px;
+}
+
+/* Well Detail Content */
+.well-detail-content {
+  background-color: #0F1D3B; /* Dark blue background */
+  color: white; /* White text */
+}
+
+/* Well Detail Title */
+.well-detail-title {
+  color: white; /* White text for titles */
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+}
+
+/* Well Detail Section */
+.well-detail-section {
+  background-color: #1a2a4a; /* Slightly lighter blue for sections */
+  color: white;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+}
+
+/* Well Detail Table */
+.well-detail-table {
+  background-color: #1a2a4a; /* Slightly lighter blue for tables */
+  color: white;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.well-detail-table th,
+.well-detail-table td {
+  color: white;
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #2a3a5a;
+}
+
+.well-detail-table th {
+  background-color: #2a3a5a;
+  font-weight: 600;
+}
