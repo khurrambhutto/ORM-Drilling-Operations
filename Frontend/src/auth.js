@@ -63,8 +63,23 @@ export function AuthProvider({ children }) {
         try { dataParsed = text ? JSON.parse(text) : null; } catch { /* ignore */ }
         if (!res.ok) {
           const detail = dataParsed?.detail || text || `HTTP ${res.status}`;
-            console.warn('[auth] Failed on base', { base, status: res.status, detail });
+          console.warn('[auth] Failed on base', { base, status: res.status, detail });
           tried.push({ base, status: res.status, detail });
+
+          // If the backend responded with 401 Unauthorized, the server is reachable and credentials are wrong
+          if (res.status === 401) {
+            if (typeof localStorage !== 'undefined') localStorage.setItem('api_base_active', base);
+            if (typeof window !== 'undefined') window.API_BASE = base;
+            const errorMsg = (detail && detail.toLowerCase().includes('inactive'))
+              ? 'User account is inactive'
+              : 'Wrong password or credentials';
+            throw new Error(errorMsg);
+          }
+
+          if (res.status === 400) {
+            throw new Error(detail || 'Username and password required');
+          }
+
           lastError = new Error(detail);
           continue; // try next
         }
@@ -82,6 +97,9 @@ export function AuthProvider({ children }) {
         await fetchMe(dataParsed.token);
         return dataParsed;
       } catch (err) {
+        if (err.message === 'Wrong password or credentials' || err.message === 'User account is inactive' || err.message === 'Username and password required') {
+          throw err;
+        }
         const msg = err?.name === 'AbortError' ? 'Timeout' : (err?.message || 'Network error');
         console.error('[auth] Network attempt error', { base, msg });
         tried.push({ base, status: 'NETWORK', detail: msg });
@@ -89,8 +107,11 @@ export function AuthProvider({ children }) {
         continue;
       }
     }
-    const summary = tried.map(t => `${t.base} => ${t.status} (${t.detail})`).join('\n');
-    throw new Error(`Login failed. Attempts:\n${summary}\nLast: ${lastError?.message}`);
+    const hasAuthFailure = tried.some(t => t.status === 401 || (t.detail && t.detail.toLowerCase().includes('credential')));
+    if (hasAuthFailure) {
+      throw new Error('Wrong password or credentials');
+    }
+    throw new Error('Unable to connect to server. Please check your network connection.');
   };
 
   const boundAuthFetch = useCallback((url, options={}) => {

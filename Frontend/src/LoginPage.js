@@ -30,7 +30,12 @@ export default function LoginPage() {
 			const dest = location.state?.from?.pathname || '/dashboard';
 			navigate(dest);
 		} catch (er) {
-			setError(er.message);
+			const msg = er?.message || 'Login failed';
+			if (msg.includes('401') || msg.toLowerCase().includes('credential') || msg.toLowerCase().includes('password')) {
+				setError('Wrong password or credentials');
+			} else {
+				setError(msg);
+			}
 		} finally {
 			setSubmitting(false);
 		}

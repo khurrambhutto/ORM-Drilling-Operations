@@ -150,13 +150,13 @@ def login(data: dict = Body(...)):
         cursor.execute("SELECT UserID, PasswordHash, PasswordSalt, IsAdmin, IsActive FROM Users WHERE Username = ?", (username,))
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            raise HTTPException(status_code=401, detail="Wrong password or credentials")
         if row[4] == 0:
             raise HTTPException(status_code=401, detail="Inactive user")
         stored_hash_b64 = base64.b64encode(row[1]).decode()
         salt_b64 = base64.b64encode(row[2]).decode()
         if not verify_password(password, salt_b64, stored_hash_b64):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            raise HTTPException(status_code=401, detail="Wrong password or credentials")
         token = create_token(row[0], username, bool(row[3]))
         return {"token": token, "isAdmin": bool(row[3])}
     finally:
