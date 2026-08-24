@@ -36,9 +36,22 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
     ...initialData
   });
   const [error, setError] = useState(null);
+  const [latDir, setLatDir] = useState('N');
+  const [lonDir, setLonDir] = useState('E');
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Apply hemisphere sign and store as signed decimal
+  const handleCoordChange = (field, absValue, dir) => {
+    if (absValue === '' || absValue === undefined) {
+      setFormData(prev => ({ ...prev, [field]: '' }));
+      return;
+    }
+    const num = Math.abs(parseFloat(absValue));
+    const signed = (dir === 'S' || dir === 'W') ? -num : num;
+    setFormData(prev => ({ ...prev, [field]: isNaN(signed) ? '' : String(signed) }));
   };
 
   const handleSubmit = async () => {
@@ -58,6 +71,8 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
         JUVPercent: '',
         GeneralNotes: ''
       });
+      setLatDir('N');
+      setLonDir('E');
       onClose();
     } catch (err) {
   // Remove '400:' prefix if present
@@ -102,22 +117,48 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
             onChange={e => handleInputChange('SpudDate', e.target.value)} 
             style={{ padding: 8, borderRadius: 6, border: '1px solid #ccc' }} 
           />
-          <input 
-            placeholder="Longitude *" 
-            type="number"
-            step="any"
-            value={formData.Longitude} 
-            onChange={e => handleInputChange('Longitude', e.target.value)} 
-            style={{ padding: 8, borderRadius: 6, border: '1px solid #ccc' }} 
-          />
-          <input 
-            placeholder="Latitude *" 
-            type="number"
-            step="any"
-            value={formData.Latitude} 
-            onChange={e => handleInputChange('Latitude', e.target.value)} 
-            style={{ padding: 8, borderRadius: 6, border: '1px solid #ccc' }} 
-          />
+          {/* Longitude with E/W selector */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input
+              placeholder="Longitude *"
+              type="number"
+              step="any"
+              min="0"
+              max="180"
+              value={formData.Longitude !== '' ? Math.abs(Number(formData.Longitude)) : ''}
+              onChange={e => handleCoordChange('Longitude', e.target.value, lonDir)}
+              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+            />
+            <select
+              value={lonDir}
+              onChange={e => { setLonDir(e.target.value); handleCoordChange('Longitude', formData.Longitude !== '' ? Math.abs(Number(formData.Longitude)) : '', e.target.value); }}
+              style={{ padding: '8px 4px', borderRadius: 6, border: '1px solid #ccc', fontWeight: 700, cursor: 'pointer', background: '#f0f4ff', color: '#23234c' }}
+            >
+              <option value="E">E</option>
+              <option value="W">W</option>
+            </select>
+          </div>
+          {/* Latitude with N/S selector */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input
+              placeholder="Latitude *"
+              type="number"
+              step="any"
+              min="0"
+              max="90"
+              value={formData.Latitude !== '' ? Math.abs(Number(formData.Latitude)) : ''}
+              onChange={e => handleCoordChange('Latitude', e.target.value, latDir)}
+              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+            />
+            <select
+              value={latDir}
+              onChange={e => { setLatDir(e.target.value); handleCoordChange('Latitude', formData.Latitude !== '' ? Math.abs(Number(formData.Latitude)) : '', e.target.value); }}
+              style={{ padding: '8px 4px', borderRadius: 6, border: '1px solid #ccc', fontWeight: 700, cursor: 'pointer', background: '#f0f4ff', color: '#23234c' }}
+            >
+              <option value="N">N</option>
+              <option value="S">S</option>
+            </select>
+          </div>
           <input 
             placeholder="Target Depth (M) *" 
             type="number"
