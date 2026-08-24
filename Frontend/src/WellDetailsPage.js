@@ -531,6 +531,8 @@ export default function WellDetailsPage() {
     setImportSuccess('');
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     const processAOA = (aoa) => {
+      // Keep raw values (numbers, dates) — do NOT stringify here.
+      // Only replace undefined/null with empty string for safety.
       const normalized = aoa.map(r => (r || []).map(c => (c === undefined || c === null) ? '' : c));
       setImportAOA(normalized);
       const { mapping, colLabels } = autoDetectMapping(normalized);
@@ -560,6 +562,20 @@ export default function WellDetailsPage() {
     } else {
       setImportError('Unsupported file type. Please select CSV or Excel.');
     }
+  }
+
+  // Get a short sample value from a column to verify detection in the mapping UI
+  function getSampleValue(colIdx) {
+    if (colIdx === null || !importAOA.length) return '';
+    // Scan up to 40 rows looking for a non-empty value
+    for (let r = 0; r < Math.min(40, importAOA.length); r++) {
+      const v = importAOA[r] && importAOA[r][colIdx] !== undefined ? importAOA[r][colIdx] : '';
+      const s = String(v).trim();
+      if (s && s !== '0') {
+        return s.length > 60 ? s.slice(0, 60) + '…' : s;
+      }
+    }
+    return '(empty)';
   }
 
   function handleMappingNext() {
@@ -1052,7 +1068,7 @@ export default function WellDetailsPage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr>
-                        {['App Field', 'Detected Excel Column', 'Override'].map(h => (
+                        {['App Field', 'Detected Excel Column', 'Sample Value', 'Override'].map(h => (
                           <th key={h} style={{ padding: '8px 10px', background: '#162040', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', color: '#9bb1ff' }}>{h}</th>
                         ))}
                       </tr>
@@ -1060,9 +1076,14 @@ export default function WellDetailsPage() {
                     <tbody>
                       {[['Date','📅 Date (required)'],['PlannedDepth','📊 Planned Depth'],['ActualDepth','📈 Actual Depth'],['Progress','📉 Daily Progress'],['OperationLog','📝 Operation Log']].map(([field, label]) => (
                         <tr key={field} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                          <td style={{ padding: '8px 10px', fontWeight: 700, color: field === 'Date' ? '#fbbf24' : '#fff' }}>{label}</td>
-                          <td style={{ padding: '8px 10px', color: importMapping[field] !== null ? '#43ea7f' : '#9ca3af' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 700, color: field === 'Date' ? '#fbbf24' : '#fff', whiteSpace: 'nowrap' }}>{label}</td>
+                          <td style={{ padding: '8px 10px', color: importMapping[field] !== null ? '#43ea7f' : '#9ca3af', whiteSpace: 'nowrap' }}>
                             {importMapping[field] !== null ? (importHeaders[importMapping[field]] || `Col ${importMapping[field]+1}`) : '— not detected —'}
+                          </td>
+                          <td style={{ padding: '8px 6px', color: '#d1d5db', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span title={getSampleValue(importMapping[field])} style={{ fontStyle: importMapping[field] === null ? 'italic' : 'normal', color: importMapping[field] === null ? '#6b7280' : '#d1d5db' }}>
+                              {importMapping[field] === null ? '—' : getSampleValue(importMapping[field])}
+                            </span>
                           </td>
                           <td style={{ padding: '8px 10px' }}>
                             <select
