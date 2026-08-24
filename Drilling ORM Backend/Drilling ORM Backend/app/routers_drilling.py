@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Body, UploadFile, Form, Depends
+﻿from fastapi import APIRouter, HTTPException, Request, Body, UploadFile, Form, Depends
 from functools import lru_cache
 from datetime import datetime
 import time
@@ -47,15 +47,15 @@ def get_cached_drilling_operations():
             END
             """
         )
-        # Ensure Well.JUVPercent column exists before selecting it
+        # Ensure Well.JVPercent column exists before selecting it
         cursor.execute(
             """
             IF NOT EXISTS (
                 SELECT * FROM sys.columns 
-                WHERE object_id = OBJECT_ID(N'[dbo].[Well]') AND name = 'JUVPercent'
+                WHERE object_id = OBJECT_ID(N'[dbo].[Well]') AND name = 'JVPercent'
             )
             BEGIN
-                ALTER TABLE Well ADD JUVPercent NVARCHAR(MAX) NULL;
+                ALTER TABLE Well ADD JVPercent NVARCHAR(MAX) NULL;
             END
             """
         )
@@ -70,7 +70,7 @@ def get_cached_drilling_operations():
                 b.BlockName,
                 w.Latitude,
                 w.Longitude,
-                w.JUVPercent,
+                w.JVPercent,
                 do.SpudDate,
                 do.PresentDepthM,
                 do.TDM,

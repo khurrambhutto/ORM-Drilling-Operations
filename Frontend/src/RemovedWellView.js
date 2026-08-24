@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE } from './config';
 import ProvinceImage from './ProvinceImage';
@@ -183,12 +183,12 @@ export default function RemovedWellView() {
             <div style={{ whiteSpace: 'pre-line', lineHeight: 1.8, color: '#fff', fontFamily: 'Inter, Segoe UI, Arial, sans-serif', fontSize: 22, background: 'transparent', padding: 0, borderRadius: 0, border: 'none', minHeight: '120px', textAlign: 'center' }}>
               {well.OperationLog || '—'}
             </div>
-            {/* JUV Shares display */}
-            {well?.JUVPercent && String(well.JUVPercent).trim().length > 0 && (
+            {/* JV Shares display */}
+            {well?.JVPercent && String(well.JVPercent).trim().length > 0 && (
               <div style={{ marginTop: 16, textAlign: 'left' }}>
-                <div style={{ fontWeight: 800, color: '#9bb1ff', marginBottom: 6 }}>JUV Shares</div>
+                <div style={{ fontWeight: 800, color: '#9bb1ff', marginBottom: 6 }}>JV Shares</div>
                 <div style={{ background: '#0b1530', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 12px', whiteSpace: 'pre-line', color: '#e8ecff', fontSize: 14 }}>
-                  {String(well.JUVPercent)}
+                  {String(well.JVPercent)}
                 </div>
               </div>
             )}

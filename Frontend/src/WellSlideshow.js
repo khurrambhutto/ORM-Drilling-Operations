@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { API_BASE } from './config';
 import { useAuth } from './auth';
 import Slider from "react-slick";
@@ -85,7 +85,7 @@ function WellSlideshow({ operations: propOperations, onClose }) {
                       StopCard: found.StopCard ?? 0,
                       OperationLog: found.OperationLog || '',
                       GeneralNotes: found.GeneralNotes || '',
-                      JUVPercent: found.JUVPercent || '',
+                      JVPercent: found.JVPercent || '',
                       isRemoved: true,
                     };
                     setOperations([mapped]);
@@ -452,7 +452,7 @@ function WellSlideshow({ operations: propOperations, onClose }) {
                     {op.StopCard}
                   </div>
                 </div>
-                {/* JUV Shares card (always shown) */}
+                {/* JV Shares card (always shown) */}
                 <div style={{
                   background: "#fff",
                   borderRadius: 12,
@@ -462,10 +462,10 @@ function WellSlideshow({ operations: propOperations, onClose }) {
                   border: "1px solid #e5e7eb",
                   boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)"
                 }}>
-                  <div style={{ color: "#111", fontSize: 16, fontWeight: 700, marginBottom: 8, textShadow: "none" }}>JUV Shares</div>
+                  <div style={{ color: "#111", fontSize: 16, fontWeight: 700, marginBottom: 8, textShadow: "none" }}>JV Shares</div>
                   <hr style={{ border: 0, borderTop: '1.5px solid #e5e7eb', margin: '6px 0 8px 0' }} />
                   <div style={{ whiteSpace: 'pre-line', color: '#111', background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb', fontSize: 14, lineHeight: 1.35, maxHeight: 86, overflow: 'auto' }}>
-                    {op?.JUVPercent && String(op.JUVPercent).trim().length > 0 ? String(op.JUVPercent) : '—'}
+                    {op?.JVPercent && String(op.JVPercent).trim().length > 0 ? String(op.JVPercent) : '—'}
                   </div>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, UploadFile, Form, Body
+﻿from fastapi import FastAPI, HTTPException, Request, UploadFile, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import pyodbc
@@ -462,8 +462,8 @@ def get_cached_drilling_operations():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-    # Ensure schema supports JUVPercent on Well table (store the raw text like "OGDC The Energy: 65%, Partner: 35%")
-        ensure_column(cursor, 'Well', 'JUVPercent', 'NVARCHAR(MAX) NULL')
+    # Ensure schema supports JVPercent on Well table (store the raw text like "OGDC The Energy: 65%, Partner: 35%")
+        ensure_column(cursor, 'Well', 'JVPercent', 'NVARCHAR(MAX) NULL')
         cursor.execute(
             """
             SELECT 
@@ -475,7 +475,7 @@ def get_cached_drilling_operations():
                 b.BlockName,
                 w.Latitude,
                 w.Longitude,
-                w.JUVPercent,
+                w.JVPercent,
                 do.SpudDate,
                 do.PresentDepthM,
                 do.TDM,
@@ -964,22 +964,22 @@ async def add_drilling_operation(data: dict = Body(...)):
             cursor.execute("INSERT INTO Block (BlockName) OUTPUT INSERTED.BlockID VALUES (?)", data["BlockName"])
             block_id = cursor.fetchone()[0]
 
-        # 2. Ensure Well exists or create it (also ensure JUVPercent column exists)
-        ensure_column(cursor, 'Well', 'JUVPercent', 'NVARCHAR(MAX) NULL')
+        # 2. Ensure Well exists or create it (also ensure JVPercent column exists)
+        ensure_column(cursor, 'Well', 'JVPercent', 'NVARCHAR(MAX) NULL')
         cursor.execute("SELECT WellID FROM Well WHERE WellName = ?", data["WellName"])
         well = cursor.fetchone()
         if well:
             well_id = well[0]
-            # Set JUVPercent only if provided and currently NULL to keep it immutable after creation
-            if 'JUVPercent' in data and data['JUVPercent'] is not None:
+            # Set JVPercent only if provided and currently NULL to keep it immutable after creation
+            if 'JVPercent' in data and data['JVPercent'] is not None:
                 try:
-                    cursor.execute("UPDATE Well SET JUVPercent = COALESCE(JUVPercent, ?) WHERE WellID = ?", (data['JUVPercent'], well_id))
+                    cursor.execute("UPDATE Well SET JVPercent = COALESCE(JVPercent, ?) WHERE WellID = ?", (data['JVPercent'], well_id))
                 except Exception:
                     pass
         else:
             cursor.execute(
-                "INSERT INTO Well (WellName, BlockID, Latitude, Longitude, JUVPercent) OUTPUT INSERTED.WellID VALUES (?, ?, ?, ?, ?)",
-                (data["WellName"], block_id, data.get("Latitude"), data.get("Longitude"), data.get("JUVPercent"))
+                "INSERT INTO Well (WellName, BlockID, Latitude, Longitude, JVPercent) OUTPUT INSERTED.WellID VALUES (?, ?, ?, ?, ?)",
+                (data["WellName"], block_id, data.get("Latitude"), data.get("Longitude"), data.get("JVPercent"))
             )
             well_id = cursor.fetchone()[0]
 
@@ -1139,7 +1139,7 @@ async def delete_drilling_operation(drilling_operation_id: int):
                 do.PresentDepthM, do.TDM, do.AFEPlanID, do.MDrld, do.WeeklyM, 
                 do.ActualRigDaysID, do.OperationLog, do.StopCard, do.LastUpdated,
                 do.FiscalYearPlanID, do.GeneralNotes,
-                r.RigNo, w.WellName, b.BlockName, w.Latitude, w.Longitude, w.JUVPercent,
+                r.RigNo, w.WellName, b.BlockName, w.Latitude, w.Longitude, w.JVPercent,
                 ap.DrlgDays, ap.TestDays, ar.DryDays, ar.TestWODays
             FROM DrillingOperation do
             JOIN Rig r ON do.RigID = r.RigID
@@ -1181,7 +1181,7 @@ async def delete_drilling_operation(drilling_operation_id: int):
                     BlockName VARCHAR(50),
                     Latitude FLOAT,
                     Longitude FLOAT,
-                    JUVPercent NVARCHAR(MAX) NULL,
+                    JVPercent NVARCHAR(MAX) NULL,
                     DrlgDays INT,
                     TestDays INT,
                     DryDays INT,
@@ -1190,15 +1190,15 @@ async def delete_drilling_operation(drilling_operation_id: int):
                 )
             END
         """)
-        # Ensure JUVPercent exists even if table already existed
-        ensure_column(cursor, 'PastWell', 'JUVPercent', 'NVARCHAR(MAX) NULL')
+        # Ensure JVPercent exists even if table already existed
+        ensure_column(cursor, 'PastWell', 'JVPercent', 'NVARCHAR(MAX) NULL')
 
         # Insert into PastWell table
         cursor.execute("""
             INSERT INTO PastWell (
                 OriginalDrillingOperationID, SrNo, RigID, WellID, SpudDate, PresentDepthM, TDM,
         AFEPlanID, MDrld, WeeklyM, ActualRigDaysID, OperationLog, StopCard, LastUpdated,
-        FiscalYearPlanID, GeneralNotes, RigNo, WellName, BlockName, Latitude, Longitude, JUVPercent,
+        FiscalYearPlanID, GeneralNotes, RigNo, WellName, BlockName, Latitude, Longitude, JVPercent,
                 DrlgDays, TestDays, DryDays, TestWODays
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
@@ -1256,7 +1256,7 @@ def get_past_wells():
                     BlockName VARCHAR(50),
                     Latitude FLOAT,
                     Longitude FLOAT,
-                    JUVPercent NVARCHAR(MAX) NULL,
+                    JVPercent NVARCHAR(MAX) NULL,
                     DrlgDays INT,
                     TestDays INT,
                     DryDays INT,
@@ -1266,13 +1266,13 @@ def get_past_wells():
             END
             """
         )
-        ensure_column(cursor, 'PastWell', 'JUVPercent', 'NVARCHAR(MAX) NULL')
+        ensure_column(cursor, 'PastWell', 'JVPercent', 'NVARCHAR(MAX) NULL')
 
         cursor.execute(
             """
             SELECT 
                 PastWellID, OriginalDrillingOperationID, SrNo, RigNo, WellName, BlockName,
-                Latitude, Longitude, SpudDate, PresentDepthM, TDM, JUVPercent, DrlgDays, TestDays,
+                Latitude, Longitude, SpudDate, PresentDepthM, TDM, JVPercent, DrlgDays, TestDays,
                 DryDays, TestWODays, OperationLog, StopCard, LastUpdated, DeletedAt
             FROM PastWell
             ORDER BY DeletedAt DESC

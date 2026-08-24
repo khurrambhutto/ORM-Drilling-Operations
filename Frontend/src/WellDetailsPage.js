@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import SiteHeader from './SiteHeader';
@@ -67,8 +67,8 @@ export default function WellDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  // JUV shares text (per-well, read-only)
-  const [juvShares, setJuvShares] = useState('');
+  // JV Shares text (per-well, read-only)
+  const [jvShares, setjvShares] = useState('');
   // Row range filtering state (1-based, empty = show all)
   const [startRow, setStartRow] = useState('');
   const [endRow, setEndRow] = useState('');
@@ -105,10 +105,10 @@ export default function WellDetailsPage() {
 
   useEffect(() => { fetchRows(); }, [wellId, wellName]);
 
-  // Load JUV shares from active wells, fall back to past wells
+  // Load JV Shares from active wells, fall back to past wells
   useEffect(() => {
     let cancelled = false;
-    async function loadJuv() {
+    async function loadJv() {
       try {
         // Try active wells first
   const res = await (authFetch || fetch)(`${API_BASE}/drilling-operations`);
@@ -118,8 +118,8 @@ export default function WellDetailsPage() {
             (wellId && String(op.WellID) === String(wellId)) ||
             (!wellId && (op.WellName || '').toLowerCase() === (wellName || '').toLowerCase())
           ));
-          if (!cancelled && found && found.JUVPercent) {
-            setJuvShares(String(found.JUVPercent));
+          if (!cancelled && found && found.JVPercent) {
+            setjvShares(String(found.JVPercent));
             return;
           }
         }
@@ -133,15 +133,15 @@ export default function WellDetailsPage() {
             (wellId && String(w.WellID) === String(wellId)) ||
             (!wellId && (w.WellName || '').toLowerCase() === (wellName || '').toLowerCase())
           ));
-          if (!cancelled && found2 && found2.JUVPercent) {
-            setJuvShares(String(found2.JUVPercent));
+          if (!cancelled && found2 && found2.JVPercent) {
+            setjvShares(String(found2.JVPercent));
             return;
           }
         }
       } catch {}
-      if (!cancelled) setJuvShares('');
+      if (!cancelled) setjvShares('');
     }
-    loadJuv();
+    loadJv();
     return () => { cancelled = true; };
   }, [wellId, wellName]);
 
@@ -669,13 +669,13 @@ export default function WellDetailsPage() {
           </div>
         </div>
       </div>
-      {/* JUV Shares display (read-only) */}
-      {juvShares && juvShares.trim().length > 0 && (
+      {/* JV Shares display (read-only) */}
+      {jvShares && jvShares.trim().length > 0 && (
         <div style={{ margin: '12px auto 12px auto', maxWidth: 1200 }}>
           <div style={{ background: '#23234c', color: '#fff', borderRadius: 12, padding: 16, border: '1px solid rgba(255,255,255,0.15)' }}>
-            <div style={{ fontWeight: 800, color: '#9bb1ff', marginBottom: 6 }}>JUV Shares</div>
+            <div style={{ fontWeight: 800, color: '#9bb1ff', marginBottom: 6 }}>JV Shares</div>
             <div style={{ background: '#0b1530', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 12px', whiteSpace: 'pre-line', color: '#e8ecff', fontSize: 14 }}>
-              {juvShares}
+              {jvShares}
             </div>
           </div>
         </div>

@@ -31,27 +31,47 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
     TargetDepth: '',
     PlannedAFEDaysDrilling: '',
   PlannedAFEDaysTesting: '',
-  JUVPercent: '',
+  JVPercent: '',
   GeneralNotes: '',
     ...initialData
   });
   const [error, setError] = useState(null);
   const [latDir, setLatDir] = useState('N');
   const [lonDir, setLonDir] = useState('E');
+  // DMS state for latitude and longitude
+  const [latDMS, setLatDMS] = useState({ d: '', m: '', s: '' });
+  const [lonDMS, setLonDMS] = useState({ d: '', m: '', s: '' });
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Apply hemisphere sign and store as signed decimal
-  const handleCoordChange = (field, absValue, dir) => {
-    if (absValue === '' || absValue === undefined) {
+  // Convert DMS to signed decimal and store in formData
+  const handleDMSChange = (field, part, value, dmsState, setDmsState, dir) => {
+    const updated = { ...dmsState, [part]: value };
+    setDmsState(updated);
+    const d = parseFloat(updated.d);
+    const m = parseFloat(updated.m);
+    const s = parseFloat(updated.s);
+    if (updated.d === '' && updated.m === '' && updated.s === '') {
       setFormData(prev => ({ ...prev, [field]: '' }));
       return;
     }
-    const num = Math.abs(parseFloat(absValue));
-    const signed = (dir === 'S' || dir === 'W') ? -num : num;
-    setFormData(prev => ({ ...prev, [field]: isNaN(signed) ? '' : String(signed) }));
+    const decimal = (isNaN(d) ? 0 : d) + (isNaN(m) ? 0 : m) / 60 + (isNaN(s) ? 0 : s) / 3600;
+    const signed = (dir === 'S' || dir === 'W') ? -decimal : decimal;
+    setFormData(prev => ({ ...prev, [field]: isNaN(signed) ? '' : String(Math.round(signed * 1000000) / 1000000) }));
+  };
+
+  // When hemisphere changes, flip the sign in formData
+  const handleDirChange = (field, newDir, dmsState, oldDir) => {
+    const d = parseFloat(dmsState.d);
+    const m = parseFloat(dmsState.m);
+    const s = parseFloat(dmsState.s);
+    if (!isNaN(d) || !isNaN(m) || !isNaN(s)) {
+      const decimal = (isNaN(d) ? 0 : d) + (isNaN(m) ? 0 : m) / 60 + (isNaN(s) ? 0 : s) / 3600;
+      const signed = (newDir === 'S' || newDir === 'W') ? -Math.abs(decimal) : Math.abs(decimal);
+      setFormData(prev => ({ ...prev, [field]: isNaN(signed) ? '' : String(Math.round(signed * 1000000) / 1000000) }));
+    }
   };
 
   const handleSubmit = async () => {
@@ -68,11 +88,13 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
         TargetDepth: '',
         PlannedAFEDaysDrilling: '',
         PlannedAFEDaysTesting: '',
-        JUVPercent: '',
+        JVPercent: '',
         GeneralNotes: ''
       });
       setLatDir('N');
       setLonDir('E');
+      setLatDMS({ d: '', m: '', s: '' });
+      setLonDMS({ d: '', m: '', s: '' });
       onClose();
     } catch (err) {
   // Remove '400:' prefix if present
@@ -117,47 +139,89 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
             onChange={e => handleInputChange('SpudDate', e.target.value)} 
             style={{ padding: 8, borderRadius: 6, border: '1px solid #ccc' }} 
           />
-          {/* Longitude with E/W selector */}
-          <div style={{ display: 'flex', gap: 4 }}>
-            <input
-              placeholder="Longitude *"
-              type="number"
-              step="any"
-              min="0"
-              max="180"
-              value={formData.Longitude !== '' ? Math.abs(Number(formData.Longitude)) : ''}
-              onChange={e => handleCoordChange('Longitude', e.target.value, lonDir)}
-              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
-            />
-            <select
-              value={lonDir}
-              onChange={e => { setLonDir(e.target.value); handleCoordChange('Longitude', formData.Longitude !== '' ? Math.abs(Number(formData.Longitude)) : '', e.target.value); }}
-              style={{ padding: '8px 4px', borderRadius: 6, border: '1px solid #ccc', fontWeight: 700, cursor: 'pointer', background: '#f0f4ff', color: '#23234c' }}
-            >
-              <option value="E">E</option>
-              <option value="W">W</option>
-            </select>
+          {/* Longitude DMS input */}
+          <div style={{ gridColumn: '1 / span 2' }}>
+            <div style={{ fontSize: 11, color: '#555', marginBottom: 3, fontWeight: 600 }}>Longitude (Degrees° Minutes' Seconds")</div>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                placeholder="°"
+                type="number"
+                min="0" max="180" step="1"
+                value={lonDMS.d}
+                onChange={e => handleDMSChange('Longitude', 'd', e.target.value, lonDMS, setLonDMS, lonDir)}
+                style={{ flex: 2, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+              />
+              <span style={{ fontWeight: 700, fontSize: 16 }}>°</span>
+              <input
+                placeholder="'"
+                type="number"
+                min="0" max="59" step="1"
+                value={lonDMS.m}
+                onChange={e => handleDMSChange('Longitude', 'm', e.target.value, lonDMS, setLonDMS, lonDir)}
+                style={{ flex: 2, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+              />
+              <span style={{ fontWeight: 700, fontSize: 16 }}>'</span>
+              <input
+                placeholder='"'
+                type="number"
+                min="0" max="59.999" step="any"
+                value={lonDMS.s}
+                onChange={e => handleDMSChange('Longitude', 's', e.target.value, lonDMS, setLonDMS, lonDir)}
+                style={{ flex: 2, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+              />
+              <span style={{ fontWeight: 700, fontSize: 16 }}>"</span>
+              <select
+                value={lonDir}
+                onChange={e => { handleDirChange('Longitude', e.target.value, lonDMS, lonDir); setLonDir(e.target.value); }}
+                style={{ padding: '8px 4px', borderRadius: 6, border: '1px solid #ccc', fontWeight: 700, cursor: 'pointer', background: '#f0f4ff', color: '#23234c' }}
+              >
+                <option value="E">E</option>
+                <option value="W">W</option>
+              </select>
+            </div>
+            {formData.Longitude !== '' && <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Decimal: {Number(formData.Longitude).toFixed(6)}°</div>}
           </div>
-          {/* Latitude with N/S selector */}
-          <div style={{ display: 'flex', gap: 4 }}>
-            <input
-              placeholder="Latitude *"
-              type="number"
-              step="any"
-              min="0"
-              max="90"
-              value={formData.Latitude !== '' ? Math.abs(Number(formData.Latitude)) : ''}
-              onChange={e => handleCoordChange('Latitude', e.target.value, latDir)}
-              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
-            />
-            <select
-              value={latDir}
-              onChange={e => { setLatDir(e.target.value); handleCoordChange('Latitude', formData.Latitude !== '' ? Math.abs(Number(formData.Latitude)) : '', e.target.value); }}
-              style={{ padding: '8px 4px', borderRadius: 6, border: '1px solid #ccc', fontWeight: 700, cursor: 'pointer', background: '#f0f4ff', color: '#23234c' }}
-            >
-              <option value="N">N</option>
-              <option value="S">S</option>
-            </select>
+          {/* Latitude DMS input */}
+          <div style={{ gridColumn: '1 / span 2' }}>
+            <div style={{ fontSize: 11, color: '#555', marginBottom: 3, fontWeight: 600 }}>Latitude (Degrees° Minutes' Seconds")</div>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                placeholder="°"
+                type="number"
+                min="0" max="90" step="1"
+                value={latDMS.d}
+                onChange={e => handleDMSChange('Latitude', 'd', e.target.value, latDMS, setLatDMS, latDir)}
+                style={{ flex: 2, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+              />
+              <span style={{ fontWeight: 700, fontSize: 16 }}>°</span>
+              <input
+                placeholder="'"
+                type="number"
+                min="0" max="59" step="1"
+                value={latDMS.m}
+                onChange={e => handleDMSChange('Latitude', 'm', e.target.value, latDMS, setLatDMS, latDir)}
+                style={{ flex: 2, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+              />
+              <span style={{ fontWeight: 700, fontSize: 16 }}>'</span>
+              <input
+                placeholder='"'
+                type="number"
+                min="0" max="59.999" step="any"
+                value={latDMS.s}
+                onChange={e => handleDMSChange('Latitude', 's', e.target.value, latDMS, setLatDMS, latDir)}
+                style={{ flex: 2, padding: 8, borderRadius: 6, border: '1px solid #ccc', minWidth: 0 }}
+              />
+              <span style={{ fontWeight: 700, fontSize: 16 }}>"</span>
+              <select
+                value={latDir}
+                onChange={e => { handleDirChange('Latitude', e.target.value, latDMS, latDir); setLatDir(e.target.value); }}
+                style={{ padding: '8px 4px', borderRadius: 6, border: '1px solid #ccc', fontWeight: 700, cursor: 'pointer', background: '#f0f4ff', color: '#23234c' }}
+              >
+                <option value="N">N</option>
+                <option value="S">S</option>
+              </select>
+            </div>
+            {formData.Latitude !== '' && <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>Decimal: {Number(formData.Latitude).toFixed(6)}°</div>}
           </div>
           <input 
             placeholder="Target Depth (M) *" 
@@ -182,9 +246,9 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
           />
           <div style={{ gridColumn: '1 / span 2', display: 'flex', flexDirection: 'column' }}>
             <textarea
-              placeholder="JUV Shares (one per line: Company: value%)"
-              value={formData.JUVPercent}
-              onChange={e => handleInputChange('JUVPercent', e.target.value)}
+              placeholder="JV Shares (one per line: Company: value%)"
+              value={formData.JVPercent}
+              onChange={e => handleInputChange('JVPercent', e.target.value)}
               rows={4}
               style={{ padding: 8, borderRadius: 6, border: '1px solid #ccc', resize: 'vertical', minHeight: 100 }}
             />
@@ -779,7 +843,7 @@ function DrillingDashboard() {
     setEditData({
       ...selectedOp,
       GeneralNotes: selectedOp.GeneralNotes || '',
-  JUVPercent: selectedOp.JUVPercent || '',
+  JVPercent: selectedOp.JVPercent || '',
       DrlgDays: selectedOp.DrlgDays || '',
       DryDays: selectedOp.DryDays || '',
       TestDays: selectedOp.TestDays || '',
@@ -820,7 +884,7 @@ function DrillingDashboard() {
       OperationLog: editData.OperationLog || null,
       StopCard: sanitizeInt(editData.StopCard),
       GeneralNotes: editData.GeneralNotes || null,
-  JUVPercent: (editData.JUVPercent || '').trim() === '' ? null : String(editData.JUVPercent),
+  JVPercent: (editData.JVPercent || '').trim() === '' ? null : String(editData.JVPercent),
       DrlgDays: sanitizeInt(editData.DrlgDays),
       DryDays: sanitizeInt(editData.DryDays),
       TestDays: sanitizeInt(editData.TestDays),
@@ -1076,7 +1140,7 @@ function DrillingDashboard() {
         'Mtr Drld',
         { content: 'Actual Rig Days', colSpan: 2, styles: { halign: 'center', fillColor: [180, 198, 231] } },
         'Operations During Last 24 Hrs',
-        'JUV Shares',
+        'JV Shares',
         'Stop Cards',
         { content: 'F.Y 2025-26', colSpan: 4, styles: { halign: 'center', fillColor: [255, 224, 178] } }
       ],
@@ -1130,9 +1194,9 @@ function DrillingDashboard() {
           .join(', ');
       // Build runtime values
       const { presentDepth, metersDrilled, opLog } = derive(op);
-  // Build Operation Log cell (no appended JUV; separate column now)
+  // Build Operation Log cell (no appended JV; separate column now)
   let operationLogCell = (opLog || '').split('\n').map((line, i) => i === 0 ? `**${line}**` : line).join('\n');
-  const juvText = (op.JUVPercent || '').toString().trim();
+  const jvText = (op.JVPercent || '').toString().trim();
       const mainRow = [
         idx + 1,
         op.RigNo || '',
@@ -1144,7 +1208,7 @@ function DrillingDashboard() {
   op.DryDays || '',
   op.TestWODays || '',
   operationLogCell,
-  juvText,
+  jvText,
   op.StopCard || '',
   getQ('1st QTR'), getQ('2nd QTR'), getQ('3rd QTR'), getQ('4th QTR')
       ];
@@ -1158,7 +1222,7 @@ function DrillingDashboard() {
       styles: { fontSize: 8, cellPadding: 2, valign: 'middle', lineColor: [44,62,80], lineWidth: 0.2 },
       headStyles: { fillColor: [135, 206, 235], textColor: 44, fontStyle: 'bold', halign: 'center' },
       columnStyles: {
-        // Only define a narrow column for the new JUV Shares; leave all other widths unchanged
+        // Only define a narrow column for the new JV Shares; leave all other widths unchanged
         10: { cellWidth: 22, fontSize: 7, overflow: 'linebreak', halign: 'left' }
       },
       didParseCell: function (data) {
@@ -1205,7 +1269,7 @@ function DrillingDashboard() {
           'Mtr Drld',
           { content: 'Actual Rig Days', colSpan: 2, styles: { halign: 'center', fillColor: [180, 198, 231] } },
           'Operations During Last 24 Hrs',
-          'JUV Shares',
+          'JV Shares',
           'Stop Cards',
           { content: 'F.Y 2025-26', colSpan: 4, styles: { halign: 'center', fillColor: [255, 224, 178] } }
         ],
@@ -1255,10 +1319,10 @@ function DrillingDashboard() {
             .filter(plan => (plan.QTR || '').toLowerCase().includes(q.toLowerCase()))
             .map(plan => plan.WellName)
             .join(', ');
-        // Build runtime Operation Log cell; append JUV shares text (if any) after the log
+        // Build runtime Operation Log cell; append JV Shares text (if any) after the log
         const { presentDepth, metersDrilled, opLog } = derive(op);
   let operationLogCell = (opLog || '').split('\n').map((line, i) => i === 0 ? `**${line}**` : line).join('\n');
-  const juvText = (op.JUVPercent || '').toString().trim();
+  const jvText = (op.JVPercent || '').toString().trim();
         const mainRow = [
           idx + 1,
           op.RigNo || '',
@@ -1270,7 +1334,7 @@ function DrillingDashboard() {
           op.DryDays || '',
           op.TestWODays || '',
           operationLogCell,
-          juvText,
+          jvText,
           op.StopCard || '',
           getQ('1st QTR'), getQ('2nd QTR'), getQ('3rd QTR'), getQ('4th QTR')
         ];
@@ -1283,7 +1347,7 @@ function DrillingDashboard() {
         styles: { fontSize: 8, cellPadding: 2, valign: 'middle', lineColor: [44,62,80], lineWidth: 0.2 },
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold', halign: 'center' },
         columnStyles: {
-          // Keep only the small JUV Shares column; don't change other widths
+          // Keep only the small JV Shares column; don't change other widths
           10: { cellWidth: 22, fontSize: 7, overflow: 'linebreak', halign: 'left' }
         },
         didParseCell: function (data) {
@@ -1327,8 +1391,8 @@ function DrillingDashboard() {
       payload.TargetDepth = payload.TargetDepth ? Number(payload.TargetDepth) : null;
   payload.PlannedAFEDaysDrilling = payload.PlannedAFEDaysDrilling ? Number(payload.PlannedAFEDaysDrilling) : null;
   payload.PlannedAFEDaysTesting = payload.PlannedAFEDaysTesting ? Number(payload.PlannedAFEDaysTesting) : null;
-  // Keep JUVPercent as text (immutable shares), trim blank to null
-  payload.JUVPercent = (payload.JUVPercent || '').trim() === '' ? null : String(payload.JUVPercent);
+  // Keep JVPercent as text (immutable shares), trim blank to null
+  payload.JVPercent = (payload.JVPercent || '').trim() === '' ? null : String(payload.JVPercent);
   // Ensure required text fields are present
   payload.WellName = String(payload.WellName || '');
   payload.RigName = String(payload.RigName || '');
@@ -2198,7 +2262,7 @@ function DrillingDashboard() {
 
           {/* Fiscal Year Planning removed here; use Rig-wise F.Y Editor from the top button */}
 
-          {/* General Notes and JUV Shares (editable in Edit mode) */}
+          {/* General Notes and JV Shares (editable in Edit mode) */}
           <div style={{ marginBottom: 24, textAlign: 'center' }}>
             <div style={{ background: '#23234c', color: '#fff', borderRadius: 12, padding: 20, boxShadow: '0 4px 16px rgba(25, 118, 210, 0.10)', border: '1px solid rgba(42,91,215,0.4)', fontFamily: 'Inter, Segoe UI, Arial, sans-serif', textAlign: 'left', maxWidth: '1200px', margin: '0 auto' }}>
               <h4 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: 20, fontWeight: 800 }}>General Notes</h4>
@@ -2216,18 +2280,18 @@ function DrillingDashboard() {
               )}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <h4 style={{ margin: '0 0 8px 0', color: '#fff', fontSize: 18, fontWeight: 800 }}>JUV Shares</h4>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#fff', fontSize: 18, fontWeight: 800 }}>JV Shares</h4>
                 </div>
                 {editMode ? (
                   <textarea
-                    value={editData.JUVPercent || ''}
-                    onChange={(e) => setEditData(prev => ({ ...prev, JUVPercent: e.target.value }))}
-                    placeholder="Enter JUV shares (one per line: Company: value%)"
+                    value={editData.JVPercent || ''}
+                    onChange={(e) => setEditData(prev => ({ ...prev, JVPercent: e.target.value }))}
+                    placeholder="Enter JV Shares (one per line: Company: value%)"
                     style={{ width: '100%', minHeight: 100, resize: 'vertical', background: '#0b1530', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, padding: 12, lineHeight: 1.4 }}
                   />
                 ) : (
                   <div style={{ whiteSpace: 'pre-line', background: '#0b1530', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 12px', color: '#e8ecff', minHeight: 60 }}>
-                    {selectedOp?.JUVPercent ? String(selectedOp.JUVPercent) : '—'}
+                    {selectedOp?.JVPercent ? String(selectedOp.JVPercent) : '—'}
                   </div>
                 )}
               </div>

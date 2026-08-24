@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+﻿from fastapi import APIRouter, HTTPException, Depends
 from .db import get_db_connection, return_connection
 from .routers_auth import get_current_user
 
@@ -46,7 +46,7 @@ def get_past_wells(user=Depends(get_current_user)):
                 b.BlockName,
                 w.Latitude,
                 w.Longitude,
-                w.JUVPercent,
+                w.JVPercent,
                 do.SpudDate,
                 do.PresentDepthM,
                 do.TDM,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Body, Depends
+﻿from fastapi import APIRouter, HTTPException, Request, Body, Depends
 from datetime import datetime, timedelta
 from .db import get_db_connection, return_connection
 from .routers_auth import get_current_user
@@ -112,22 +112,22 @@ async def update_drilling_operation(operation_id: int, request: Request, user=De
             datetime.now(),
             operation_id
         ))
-        # If JUVPercent provided, update on Well table (editable field)
-        if "JUVPercent" in data:
+        # If JVPercent provided, update on Well table (editable field)
+        if "JVPercent" in data:
             # Ensure column exists
             cursor.execute(
                 """
                 IF NOT EXISTS (
                     SELECT * FROM sys.columns 
-                    WHERE object_id = OBJECT_ID(N'[dbo].[Well]') AND name = 'JUVPercent'
+                    WHERE object_id = OBJECT_ID(N'[dbo].[Well]') AND name = 'JVPercent'
                 )
                 BEGIN
-                    ALTER TABLE Well ADD JUVPercent NVARCHAR(MAX) NULL;
+                    ALTER TABLE Well ADD JVPercent NVARCHAR(MAX) NULL;
                 END
                 """
             )
             well_id = current[2]
-            cursor.execute("UPDATE Well SET JUVPercent = ? WHERE WellID = ?", (data.get("JUVPercent"), well_id))
+            cursor.execute("UPDATE Well SET JVPercent = ? WHERE WellID = ?", (data.get("JVPercent"), well_id))
         conn.commit()
         return {"message": "Updated successfully"}
     except Exception as e:
@@ -157,21 +157,21 @@ async def add_drilling_operation(data: dict = Body(...), user=Depends(get_curren
             cursor.execute("INSERT INTO Block (BlockName) OUTPUT INSERTED.BlockID VALUES (?)", data["BlockName"])
             block_id = cursor.fetchone()[0]
 
-        # Ensure Well has JUVPercent column
+        # Ensure Well has JVPercent column
         cursor.execute(
             """
             IF NOT EXISTS (
                 SELECT * FROM sys.columns 
-                WHERE object_id = OBJECT_ID(N'[dbo].[Well]') AND name = 'JUVPercent'
+                WHERE object_id = OBJECT_ID(N'[dbo].[Well]') AND name = 'JVPercent'
             )
             BEGIN
-                ALTER TABLE Well ADD JUVPercent NVARCHAR(MAX) NULL;
+                ALTER TABLE Well ADD JVPercent NVARCHAR(MAX) NULL;
             END
             """
         )
-        # Now safe to insert Well (with JUVPercent)
-        cursor.execute("INSERT INTO Well (WellName, BlockID, Latitude, Longitude, JUVPercent) OUTPUT INSERTED.WellID VALUES (?, ?, ?, ?, ?)",
-                     (data["WellName"], block_id, data.get("Latitude"), data.get("Longitude"), data.get("JUVPercent")))
+        # Now safe to insert Well (with JVPercent)
+        cursor.execute("INSERT INTO Well (WellName, BlockID, Latitude, Longitude, JVPercent) OUTPUT INSERTED.WellID VALUES (?, ?, ?, ?, ?)",
+                     (data["WellName"], block_id, data.get("Latitude"), data.get("Longitude"), data.get("JVPercent")))
         well_id = cursor.fetchone()[0]
         cursor.execute("SELECT RigID FROM Rig WHERE RigNo = ?", data["RigName"])
         rig = cursor.fetchone()
