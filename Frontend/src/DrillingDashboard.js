@@ -105,7 +105,7 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
           <input 
             placeholder="Longitude *" 
             type="number"
-            step="0.0001"
+            step="any"
             value={formData.Longitude} 
             onChange={e => handleInputChange('Longitude', e.target.value)} 
             style={{ padding: 8, borderRadius: 6, border: '1px solid #ccc' }} 
@@ -113,7 +113,7 @@ const AddWellModal = ({ isOpen, onClose, onSubmit, initialData = {} }) => {
           <input 
             placeholder="Latitude *" 
             type="number"
-            step="0.0001"
+            step="any"
             value={formData.Latitude} 
             onChange={e => handleInputChange('Latitude', e.target.value)} 
             style={{ padding: 8, borderRadius: 6, border: '1px solid #ccc' }} 
