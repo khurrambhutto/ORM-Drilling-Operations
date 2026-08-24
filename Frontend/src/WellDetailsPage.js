@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import SiteHeader from './SiteHeader';
@@ -51,19 +51,26 @@ export default function WellDetailsPage() {
   const [rows, setRows] = useState([]);
   // Track manually added row IDs
   const [manualRowIds, setManualRowIds] = useState([]);
-  // Import modal state (CSV/Excel)
+  // Import modal state (CSV/Excel) — smart multi-column date-based
   const [showImport, setShowImport] = useState(false);
+  const [importStep, setImportStep] = useState('upload'); // 'upload' | 'mapping' | 'preview'
   const [fileName, setFileName] = useState('');
-  const [columnName, setColumnName] = useState(''); // source column name
-  const [targetField, setTargetField] = useState('PlannedDepth'); // destination field
-  const [parsedHeaders, setParsedHeaders] = useState([]); // legacy/simple headers
-  const [parsedRows, setParsedRows] = useState([]); // legacy/simple data rows
-  const [parsedAOA, setParsedAOA] = useState([]); // full AoA for advanced detection
-  const [candidateCols, setCandidateCols] = useState([]); // [{index,label,synonyms:string[]}] 
-  const [selectedColIndex, setSelectedColIndex] = useState(null);
+  const [importAOA, setImportAOA] = useState([]); // raw array-of-arrays from file
+  const [importHeaders, setImportHeaders] = useState([]); // detected column headers for dropdowns
+  // mapping: { Date, PlannedDepth, ActualDepth, Progress, OperationLog } → colIdx or null
+  const [importMapping, setImportMapping] = useState({ Date: null, PlannedDepth: null, ActualDepth: null, Progress: null, OperationLog: null });
+  const [importMatches, setImportMatches] = useState([]); // [{rowId, date, values}]
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
+  // Legacy simple state (kept for compatibility)
+  const [columnName, setColumnName] = useState('');
+  const [targetField, setTargetField] = useState('PlannedDepth');
+  const [parsedHeaders, setParsedHeaders] = useState([]);
+  const [parsedRows, setParsedRows] = useState([]);
+  const [parsedAOA, setParsedAOA] = useState([]);
+  const [candidateCols, setCandidateCols] = useState([]);
+  const [selectedColIndex, setSelectedColIndex] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -273,7 +280,132 @@ export default function WellDetailsPage() {
     }
   }
 
-  // --- Import helpers ---
+  // --- Smart Import helpers ---
+
+  // Normalize a header string for fuzzy matching
+  function normH(s) {
+    return (s || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  // Convert Excel date serial OR date string → 'YYYY-MM-DD'
+  function parseExcelDate(val) {
+    if (val === null || val === undefined || val === '') return null;
+    const s = String(val).trim();
+    // Excel serial number (e.g. 45836)
+    const num = Number(s.replace(/,/g, ''));
+    if (!isNaN(num) && num > 20000 && num < 80000) {
+      // xlsx epoch: Jan 1 1900 = 1, with leap-year bug (day 60 = Feb 29 1900 never existed)
+      const epoch = new Date(Date.UTC(1899, 11, 30));
+      epoch.setUTCDate(epoch.getUTCDate() + Math.floor(num));
+      return epoch.toISOString().slice(0, 10);
+    }
+    // Try ISO / common formats
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    // Try DD-Mon-YYYY or DD/MM/YYYY
+    const parts = s.match(/(\d{1,2})[\-\/](\w{3,9})[\-\/](\d{2,4})/);
+    if (parts) {
+      const months = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+      const mKey = parts[2].toLowerCase().slice(0,3);
+      if (months[mKey] !== undefined) {
+        const yr = parts[3].length === 2 ? 2000 + Number(parts[3]) : Number(parts[3]);
+        const d2 = new Date(Date.UTC(yr, months[mKey], Number(parts[1])));
+        if (!isNaN(d2.getTime())) return d2.toISOString().slice(0, 10);
+      }
+    }
+    return null;
+  }
+
+  // Auto-detect which column maps to each app field
+  function autoDetectMapping(aoa) {
+    // Scan first 15 rows for header candidates
+    const scanRows = Math.min(15, aoa.length);
+    let colCount = 0;
+    for (let r = 0; r < scanRows; r++) colCount = Math.max(colCount, (aoa[r] || []).length);
+
+    // Build per-column best header label
+    const colLabels = [];
+    for (let c = 0; c < colCount; c++) {
+      const texts = [];
+      for (let r = 0; r < scanRows; r++) {
+        const v = aoa[r] && aoa[r][c] ? String(aoa[r][c]).trim() : '';
+        if (v && /[a-zA-Z]/.test(v)) texts.push(v);
+      }
+      colLabels.push(texts.length ? texts.sort((a,b) => b.length - a.length)[0] : `Col ${c+1}`);
+    }
+
+    const synonyms = {
+      Date: ['date', 'report date', 'reportdate', 'report_date', 'dt', 'dated'],
+      PlannedDepth: ['planned depth', 'planneddepth', 'planned', 'p depth', 'sim', 'planned m', 'planed depth'],
+      ActualDepth: ['actual depth', 'actualdepth', 'actual', 'a depth', 'depth m', 'cum depth', 'cumulative', 'gurgalot', 'depth(m)', 'depth m'],
+      Progress: ['daily progress', 'progress', 'daily', 'drlg', 'drld today', 'mddrld', 'metres drilled'],
+      OperationLog: ['operations during', 'daily operations', 'operation log', 'operationlog', 'operations', 'remarks', 'log', 'daily ops'],
+    };
+
+    const mapping = { Date: null, PlannedDepth: null, ActualDepth: null, Progress: null, OperationLog: null };
+    const used = new Set();
+    // Priority order: Date first, then others
+    for (const field of ['Date', 'PlannedDepth', 'ActualDepth', 'Progress', 'OperationLog']) {
+      let best = { idx: null, score: 0 };
+      for (let c = 0; c < colCount; c++) {
+        if (used.has(c)) continue;
+        const lbl = normH(colLabels[c]);
+        for (const syn of synonyms[field]) {
+          const s = normH(syn);
+          let score = 0;
+          if (lbl === s) score = 100;
+          else if (lbl.includes(s) || s.includes(lbl)) score = Math.min(lbl.length, s.length);
+          if (score > best.score) best = { idx: c, score };
+        }
+      }
+      if (best.idx !== null && best.score > 0) { mapping[field] = best.idx; used.add(best.idx); }
+    }
+    return { mapping, colLabels };
+  }
+
+  // Build matches: join Excel rows to app rows by date
+  function buildImportMatches(aoa, mapping, colLabels) {
+    if (mapping.Date === null) return [];
+    // Find first data row (skip header rows — first row where Date col parses as a date)
+    let dataStart = 0;
+    for (let r = 0; r < Math.min(20, aoa.length); r++) {
+      const raw = aoa[r] && aoa[r][mapping.Date] !== undefined ? aoa[r][mapping.Date] : '';
+      const d = parseExcelDate(raw);
+      if (d) { dataStart = r; break; }
+    }
+
+    // Build lookup: 'YYYY-MM-DD' → app row
+    const appDateMap = {};
+    for (const row of rows) {
+      const d = row.Date ? String(row.Date).slice(0, 10) : null;
+      if (d) appDateMap[d] = row;
+    }
+
+    const matches = [];
+    for (let r = dataStart; r < aoa.length; r++) {
+      const excelRow = aoa[r] || [];
+      const rawDate = excelRow[mapping.Date] !== undefined ? excelRow[mapping.Date] : '';
+      const isoDate = parseExcelDate(rawDate);
+      if (!isoDate) continue;
+      const appRow = appDateMap[isoDate];
+      if (!appRow) continue;
+      const values = {};
+      const numFields = new Set(['PlannedDepth', 'ActualDepth', 'Progress']);
+      for (const field of ['PlannedDepth', 'ActualDepth', 'Progress', 'OperationLog']) {
+        if (mapping[field] === null) continue;
+        const raw = excelRow[mapping[field]] !== undefined ? String(excelRow[mapping[field]]).trim() : '';
+        if (numFields.has(field)) {
+          const n = Number(raw.replace(/[,\s]/g, ''));
+          values[field] = raw === '' ? null : Number.isFinite(n) ? n : null;
+        } else {
+          values[field] = raw === '' ? '' : raw;
+        }
+      }
+      matches.push({ rowId: appRow.WellDailyProgressID, isoDate, excelDateRaw: String(rawDate), values });
+    }
+    return matches;
+  }
+
   function parseCSV(text) {
     const rows = [];
     let cur = '';
@@ -298,6 +430,22 @@ export default function WellDetailsPage() {
     return rows;
   }
 
+  // Pick best sheet: prefer 'DTC DATA', else sheet with most columns in first 10 rows
+  function pickBestSheet(wb) {
+    const dtcIdx = wb.SheetNames.findIndex(n => n.trim().toUpperCase() === 'DTC DATA');
+    if (dtcIdx !== -1) return wb.SheetNames[dtcIdx];
+    // Fall back to widest sheet
+    let best = { name: wb.SheetNames[0], cols: 0 };
+    for (const name of wb.SheetNames) {
+      const ws = wb.Sheets[name];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+      let maxCols = 0;
+      for (let r = 0; r < Math.min(10, aoa.length); r++) maxCols = Math.max(maxCols, (aoa[r] || []).length);
+      if (maxCols > best.cols) best = { name, cols: maxCols };
+    }
+    return best.name;
+  }
+
   function handleImportFile(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -305,40 +453,30 @@ export default function WellDetailsPage() {
     setImportError('');
     setImportSuccess('');
     const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const processAOA = (aoa) => {
+      const normalized = aoa.map(r => (r || []).map(c => (c === undefined || c === null) ? '' : c));
+      setImportAOA(normalized);
+      const { mapping, colLabels } = autoDetectMapping(normalized);
+      setImportMapping(mapping);
+      setImportHeaders(colLabels);
+      setImportStep('mapping');
+      setImportError('');
+    };
     if (ext === 'csv') {
       const reader = new FileReader();
-      reader.onload = () => {
-        const text = String(reader.result || '');
-        const table = parseCSV(text);
-        if (!table.length) { setParsedHeaders([]); setParsedRows([]); setParsedAOA([]); setCandidateCols([]); setSelectedColIndex(null); return; }
-        setParsedHeaders((table[0] || []).map(h => (h || '').trim()));
-        setParsedRows(table.slice(1));
-        setParsedAOA(table);
-        const cands = buildColumnCandidates(table);
-        setCandidateCols(cands);
-        setSelectedColIndex(null);
-      };
+      reader.onload = () => processAOA(parseCSV(String(reader.result || '')));
       reader.onerror = () => setImportError('Failed to read CSV file');
       reader.readAsText(file);
     } else if (ext === 'xlsx' || ext === 'xls') {
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
-          const data = new Uint8Array(ev.target.result);
-          const wb = XLSX.read(data, { type: 'array' });
-          const ws = wb.Sheets[wb.SheetNames[0]];
+          const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+          const sheetName = pickBestSheet(wb);
+          const ws = wb.Sheets[sheetName];
           const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
-          if (!aoa.length) { setParsedHeaders([]); setParsedRows([]); setParsedAOA([]); setCandidateCols([]); setSelectedColIndex(null); return; }
-          setParsedHeaders((aoa[0] || []).map(h => (String(h || '')).trim()));
-          const normalizedAOA = aoa.map(r => r.map(c => c === undefined || c === null ? '' : String(c)));
-          setParsedRows(normalizedAOA.slice(1));
-          setParsedAOA(normalizedAOA);
-          const cands = buildColumnCandidates(normalizedAOA);
-          setCandidateCols(cands);
-          setSelectedColIndex(null);
-        } catch (err) {
-          setImportError('Failed to parse Excel file');
-        }
+          processAOA(aoa);
+        } catch { setImportError('Failed to parse Excel file'); }
       };
       reader.onerror = () => setImportError('Failed to read Excel file');
       reader.readAsArrayBuffer(file);
@@ -347,15 +485,66 @@ export default function WellDetailsPage() {
     }
   }
 
-  function norm(s) {
-    return (s || '')
-      .toString()
-      .toLowerCase()
-      .replace(/\([^)]*\)/g, '') // remove ( ... )
-      .replace(/[^a-z0-9]+/g, '') // remove spaces & punctuation
-      .trim();
+  function handleMappingNext() {
+    if (importMapping.Date === null) {
+      setImportError('Please map at least the Date column so rows can be matched by date.');
+      return;
+    }
+    const hasAnyData = ['PlannedDepth','ActualDepth','Progress','OperationLog'].some(f => importMapping[f] !== null);
+    if (!hasAnyData) {
+      setImportError('Please map at least one data column (PlannedDepth, ActualDepth, Progress, or OperationLog).');
+      return;
+    }
+    setImportError('');
+    const matches = buildImportMatches(importAOA, importMapping, importHeaders);
+    setImportMatches(matches);
+    setImportStep('preview');
   }
 
+  async function handleImportConfirm() {
+    setImportError('');
+    setImportLoading(true);
+    try {
+      if (!importMatches.length) throw new Error('No matching rows found to import.');
+      await Promise.all(
+        importMatches.map(({ rowId, values }) => updateCell(rowId, values))
+      );
+      await fetchRows();
+      const fields = Object.keys(importMatches[0]?.values || {}).join(', ');
+      setImportSuccess(`✅ Imported ${importMatches.length} row(s) — fields: ${fields}`);
+      resetImport();
+    } catch (e) {
+      setImportError(e.message || 'Import failed');
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  function resetImport() {
+    setShowImport(false);
+    setImportStep('upload');
+    setFileName('');
+    setImportAOA([]);
+    setImportHeaders([]);
+    setImportMapping({ Date: null, PlannedDepth: null, ActualDepth: null, Progress: null, OperationLog: null });
+    setImportMatches([]);
+    setImportError('');
+    setColumnName('');
+    setParsedHeaders([]);
+    setParsedRows([]);
+    setParsedAOA([]);
+    setCandidateCols([]);
+    setSelectedColIndex(null);
+  }
+
+  function handleImportCancel() {
+    resetImport();
+  }
+
+  // Legacy helpers kept for reference (unused by new flow)
+  function norm(s) {
+    return (s || '').toString().toLowerCase().replace(/\([^)]*\)/g, '').replace(/[^a-z0-9]+/g, '').trim();
+  }
   function buildColumnCandidates(aoa) {
     const headerScanRows = Math.min(10, aoa.length);
     let colCount = 0;
@@ -369,118 +558,9 @@ export default function WellDetailsPage() {
       }
       const uniq = Array.from(new Set(texts));
       let label = uniq.sort((a, b) => b.length - a.length)[0] || `Column ${c + 1}`;
-      const synonyms = Array.from(new Set([
-        ...uniq,
-        ...uniq.map(s => s.replace(/\([^)]*\)/g, '').trim()),
-        label,
-      ]));
-      cands.push({ index: c, label, synonyms });
+      cands.push({ index: c, label, synonyms: Array.from(new Set([...uniq, label])) });
     }
     return cands;
-  }
-
-  function pickColumnIndexByName(name) {
-    const target = norm(name);
-    if (!target) return -1;
-    let best = { idx: -1, score: 0 };
-    for (const cand of candidateCols) {
-      for (const syn of cand.synonyms) {
-        const s = norm(syn);
-        if (!s) continue;
-        if (s === target) { return cand.index; }
-        if (s.includes(target) || target.includes(s)) {
-          const score = Math.min(s.length, target.length);
-          if (score > best.score) best = { idx: cand.index, score };
-        }
-      }
-    }
-    return best.idx;
-  }
-
-  function guessStartRow(aoa, colIdx, numericPreferred) {
-    if (!Array.isArray(aoa) || aoa.length === 0) return 1;
-    const searchRows = Math.min(30, aoa.length);
-    if (!numericPreferred) return 1;
-    for (let r = 0; r < searchRows; r++) {
-      const raw = aoa[r] && aoa[r][colIdx] ? String(aoa[r][colIdx]).trim() : '';
-      const normalized = raw.replace(/[\s,]/g, '');
-      if (normalized && /^-?\d*(\.\d+)?$/.test(normalized)) {
-        return r; // first numeric-looking cell in the column
-      }
-    }
-    return 1;
-  }
-
-  async function handleImportConfirm() {
-    setImportError('');
-    setImportSuccess('');
-    try {
-      if (!parsedAOA.length) throw new Error('Please upload a CSV/Excel file');
-      if (!columnName.trim() && selectedColIndex === null) throw new Error('Please enter or select a source column');
-      setImportLoading(true);
-      let idx = selectedColIndex;
-      if (idx === null) {
-        // try exact match with simple headers first
-        const headers = parsedHeaders.map(h => (h || '').toLowerCase());
-        const exactIdx = headers.findIndex(h => h === columnName.trim().toLowerCase());
-        if (exactIdx !== -1) idx = exactIdx; else idx = pickColumnIndexByName(columnName);
-      }
-      if (idx === -1 || idx === null) throw new Error(`Column "${columnName}" not found. Try picking from detected list.`);
-
-      const numericTargets = new Set(['PlannedDepth', 'ActualDepth', 'Progress']);
-      const isNumeric = numericTargets.has(targetField);
-      // choose start row adaptively for numeric columns
-      const startRow = guessStartRow(parsedAOA, idx, isNumeric);
-      const values = parsedAOA.slice(startRow).map(r => {
-        const val = (r[idx] !== undefined && r[idx] !== null) ? r[idx] : '';
-        return String(val).trim();
-      });
-      const limit = Math.min(rows.length, values.length);
-      const updates = [];
-      for (let i = 0; i < limit; i++) {
-        const id = rows[i].WellDailyProgressID;
-        const raw = values[i];
-        if (isNumeric) {
-          const normalized = raw.replace(/[\,\s]/g, '');
-          const num = normalized === '' || normalized.toLowerCase() === 'null' ? null : Number(normalized);
-          updates.push(updateCell(id, { [targetField]: Number.isFinite(num) ? num : null }));
-        } else {
-          // free text (OperationLog)
-          const textVal = raw === '' || raw.toLowerCase() === 'null' ? '' : raw;
-          updates.push(updateCell(id, { [targetField]: textVal }));
-        }
-      }
-      await Promise.all(updates);
-      await fetchRows();
-      setImportSuccess(`Imported ${limit} value(s) into ${targetField}`);
-      setShowImport(false);
-      // reset inputs after closing
-      setTimeout(() => {
-        setFileName('');
-        setColumnName('');
-        setParsedHeaders([]);
-        setParsedRows([]);
-        setParsedAOA([]);
-        setTargetField('PlannedDepth');
-        setCandidateCols([]);
-        setSelectedColIndex(null);
-      }, 0);
-    } catch (e) {
-      setImportError(e.message || 'Import failed');
-    } finally {
-      setImportLoading(false);
-    }
-  }
-
-  function handleImportCancel() {
-    setShowImport(false);
-    setImportError('');
-    setImportSuccess('');
-    setFileName('');
-    setColumnName('');
-    setParsedHeaders([]);
-    setParsedRows([]);
-    setTargetField('PlannedDepth');
   }
 
   const thStyle = {
@@ -855,65 +935,132 @@ export default function WellDetailsPage() {
           </table>
         </div>
       )}
-      {/* CSV Import Modal */}
-  {showImport && !effectiveReadOnly && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#0F1D3B', color: '#fff', padding: 24, borderRadius: 12, width: 'min(90vw, 820px)', maxHeight: '85vh', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.15)' }}>
-            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Import Values from CSV/Excel</h3>
-            <div style={{ display: 'grid', gap: 12, marginBottom: 12 }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6 }}>File (CSV, XLSX, XLS)</label>
-                <input type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={handleImportFile} style={{ width: '100%' }} />
-                {fileName && <div style={{ fontSize: 12, color: '#bbb', marginTop: 4, wordBreak: 'break-word' }}>{fileName}</div>}
+      {/* CSV Import Modal — Smart Multi-Column Date-Based */}
+      {showImport && !effectiveReadOnly && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#0F1D3B', color: '#fff', padding: 24, borderRadius: 14, width: 'min(95vw, 860px)', maxHeight: '88vh', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 16px 48px rgba(0,0,0,0.6)' }}>
+
+            {/* Step indicator */}
+            <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
+              {[['upload','1. Upload'], ['mapping','2. Map Columns'], ['preview','3. Preview & Confirm']].map(([key, label]) => (
+                <div key={key} style={{ flex: 1, padding: '8px 0', textAlign: 'center', fontSize: 13, fontWeight: 700, background: importStep === key ? '#1e3a8a' : 'transparent', color: importStep === key ? '#93c5fd' : '#6b7280', borderRight: '1px solid rgba(255,255,255,0.08)' }}>{label}</div>
+              ))}
+            </div>
+
+            {/* ── STEP 1: Upload ── */}
+            {importStep === 'upload' && (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <h3 style={{ margin: 0, color: '#9bb1ff' }}>Import Values from Excel / CSV</h3>
+                <p style={{ margin: 0, color: '#b0b7c3', fontSize: 13 }}>Upload your DTC Data Excel file. The system will automatically detect the Date, Planned Depth, Actual Depth, Progress, and Operation Log columns and match rows by date.</p>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>File (CSV, XLSX, XLS)</label>
+                  <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleImportFile} style={{ width: '100%' }} />
+                  {fileName && <div style={{ fontSize: 12, color: '#bbb', marginTop: 6 }}>📄 {fileName}</div>}
+                </div>
+                {importError && <div style={{ color: '#ff8a80', fontSize: 13 }}>{importError}</div>}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="action-button button-danger" onClick={handleImportCancel}>Cancel</button>
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6 }}>Source Column Name</label>
-                <input
-                  type="text"
-                  value={columnName}
-                  onChange={(e) => setColumnName(e.target.value)}
-                  placeholder="e.g., PlannedDepth or Depth(mm)"
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: '#fff' }}
-                />
-                {(candidateCols.length > 0 || parsedHeaders.length > 0) && (
-                  <div style={{ fontSize: 12, color: '#bbb', marginTop: 6, maxHeight: 160, overflowY: 'auto', paddingRight: 6, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                    Detected columns: {candidateCols.map(c => c.label).join(', ') || parsedHeaders.join(', ')}
+            )}
+
+            {/* ── STEP 2: Column Mapping ── */}
+            {importStep === 'mapping' && (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: '#9bb1ff' }}>Column Mapping</h3>
+                  <p style={{ margin: '6px 0 0', color: '#b0b7c3', fontSize: 13 }}>Auto-detected columns are shown below. Adjust dropdowns if needed. Select <em>— skip —</em> to not import a field.</p>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        {['App Field', 'Detected Excel Column', 'Override'].map(h => (
+                          <th key={h} style={{ padding: '8px 10px', background: '#162040', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', color: '#9bb1ff' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[['Date','📅 Date (required)'],['PlannedDepth','📊 Planned Depth'],['ActualDepth','📈 Actual Depth'],['Progress','📉 Daily Progress'],['OperationLog','📝 Operation Log']].map(([field, label]) => (
+                        <tr key={field} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 700, color: field === 'Date' ? '#fbbf24' : '#fff' }}>{label}</td>
+                          <td style={{ padding: '8px 10px', color: importMapping[field] !== null ? '#43ea7f' : '#9ca3af' }}>
+                            {importMapping[field] !== null ? (importHeaders[importMapping[field]] || `Col ${importMapping[field]+1}`) : '— not detected —'}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <select
+                              value={importMapping[field] === null ? '' : String(importMapping[field])}
+                              onChange={e => setImportMapping(prev => ({ ...prev, [field]: e.target.value === '' ? null : Number(e.target.value) }))}
+                              style={{ width: '100%', padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: '#0b1630', color: '#fff', fontSize: 12 }}
+                            >
+                              <option value="">— skip —</option>
+                              {importHeaders.map((h, i) => (
+                                <option key={i} value={String(i)}>{h || `Col ${i+1}`}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {importError && <div style={{ color: '#ff8a80', fontSize: 13 }}>{importError}</div>}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                  <button className="action-button button-danger" onClick={handleImportCancel}>Cancel</button>
+                  <button className="action-button button-primary" onClick={handleMappingNext}>Next: Preview →</button>
+                </div>
+              </div>
+            )}
+
+            {/* ── STEP 3: Preview & Confirm ── */}
+            {importStep === 'preview' && (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: '#9bb1ff' }}>Preview — {importMatches.length} row(s) matched by date</h3>
+                  <p style={{ margin: '6px 0 0', color: '#b0b7c3', fontSize: 13 }}>
+                    {importMatches.length === 0
+                      ? '⚠️ No dates in the Excel file matched any dates in the app table. Check your column mapping or date formats.'
+                      : `Showing first ${Math.min(8, importMatches.length)} of ${importMatches.length} matched rows. Existing values will be overwritten.`
+                    }
+                  </p>
+                </div>
+                {importMatches.length > 0 && (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          {['App Date', 'Excel Date', ...Object.keys(importMatches[0].values)].map(h => (
+                            <th key={h} style={{ padding: '7px 8px', background: '#162040', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', color: '#9bb1ff', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importMatches.slice(0, 8).map(({ rowId, isoDate, excelDateRaw, values }) => (
+                          <tr key={rowId} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                            <td style={{ padding: '7px 8px', color: '#43ea7f', fontWeight: 700 }}>{isoDate}</td>
+                            <td style={{ padding: '7px 8px', color: '#b0b7c3' }}>{excelDateRaw}</td>
+                            {Object.values(values).map((v, i) => (
+                              <td key={i} style={{ padding: '7px 8px', color: '#e8ecff', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v === null ? <span style={{ color: '#6b7280' }}>null</span> : String(v)}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
-                <div style={{ fontSize: 12, color: '#bbb', marginTop: 4 }}>Match is case-insensitive; numeric fields will coerce values, text keeps raw values.</div>
-              </div>
-              {candidateCols.length > 0 && (
-                <div>
-                  <label style={{ display: 'block', marginBottom: 6 }}>Or pick from detected columns</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 6 }}>
-                    {candidateCols.map(c => (
-                      <button key={c.index} onClick={() => { setSelectedColIndex(c.index); setColumnName(c.label); }}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: selectedColIndex === c.index ? '2px solid #64b5f6' : '1px solid rgba(255,255,255,0.15)', background: '#0b1630', color: '#fff', textAlign: 'left', cursor: 'pointer', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                        {c.label}
-                      </button>
-                    ))}
+                {importError && <div style={{ color: '#ff8a80', fontSize: 13 }}>{importError}</div>}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                  <button className="action-button button-warning" onClick={() => { setImportStep('mapping'); setImportError(''); }}>← Back</button>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button className="action-button button-danger" onClick={handleImportCancel} disabled={importLoading}>Cancel</button>
+                    <button className="action-button button-success" onClick={handleImportConfirm} disabled={importLoading || importMatches.length === 0}>
+                      {importLoading ? 'Importing…' : `Confirm Import (${importMatches.length} rows)`}
+                    </button>
                   </div>
                 </div>
-              )}
-              <div>
-                <label style={{ display: 'block', marginBottom: 6 }}>Paste into field</label>
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  {['PlannedDepth','ActualDepth','Progress','OperationLog'].map((f) => (
-                    <label key={f} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input type="radio" name="targetField" value={f} checked={targetField === f} onChange={() => setTargetField(f)} />
-                      <span>{f}</span>
-                    </label>
-                  ))}
-                </div>
               </div>
-            </div>
-            {importError && <div style={{ color: '#ff8a80', marginBottom: 8 }}>{importError}</div>}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button className="action-button button-danger" onClick={handleImportCancel} disabled={importLoading}>Cancel</button>
-              <button className="action-button button-success" onClick={handleImportConfirm} disabled={importLoading || !parsedHeaders.length || !columnName}>
-                {importLoading ? 'Importing…' : 'Confirm Import'}
-              </button>
-            </div>
+            )}
+
           </div>
         </div>
       )}
