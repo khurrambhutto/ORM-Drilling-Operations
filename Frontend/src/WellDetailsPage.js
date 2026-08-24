@@ -335,11 +335,26 @@ export default function WellDetailsPage() {
     }
 
     const synonyms = {
-      Date: ['date', 'report date', 'reportdate', 'report_date', 'dt', 'dated'],
-      PlannedDepth: ['planned depth', 'planneddepth', 'planned', 'p depth', 'sim', 'planned m', 'planed depth'],
-      ActualDepth: ['actual depth', 'actualdepth', 'actual', 'a depth', 'depth m', 'cum depth', 'cumulative', 'gurgalot', 'depth(m)', 'depth m'],
-      Progress: ['daily progress', 'progress', 'daily', 'drlg', 'drld today', 'mddrld', 'metres drilled'],
-      OperationLog: ['operations during', 'daily operations', 'operation log', 'operationlog', 'operations', 'remarks', 'log', 'daily ops'],
+      Date: ['report date', 'date', 'reportdate', 'report_date', 'dt', 'dated'],
+      PlannedDepth: ['planned depth', 'planneddepth', 'planned', 'p depth', 'sim depth', 'planned m', 'planed depth', 'sim'],
+      ActualDepth: ['actual depth', 'actualdepth', 'actual', 'a depth', 'depth m', 'cum depth', 'cumulative depth', 'gurgalot', 'depth(m)'],
+      // NOTE: do NOT put 'daily' here — it will clash with 'DAILY OPERATIONS'
+      Progress: ['daily progress', 'progress', 'drlg', 'drld today', 'mddrld', 'metres drilled', 'daily prog'],
+      // All known variants of the operations log column in DTC / ORM Excel sheets
+      OperationLog: [
+        'operations during last 24 hrs',
+        'operations during last 24hrs',
+        'operations during 24 hrs',
+        'operations during',
+        'daily operations',
+        'operation log',
+        'operationlog',
+        'operations last 24',
+        'daily ops',
+        'remarks',
+        'log',
+        'operations',
+      ],
     };
 
     const mapping = { Date: null, PlannedDepth: null, ActualDepth: null, Progress: null, OperationLog: null };
@@ -393,11 +408,14 @@ export default function WellDetailsPage() {
       const numFields = new Set(['PlannedDepth', 'ActualDepth', 'Progress']);
       for (const field of ['PlannedDepth', 'ActualDepth', 'Progress', 'OperationLog']) {
         if (mapping[field] === null) continue;
-        const raw = excelRow[mapping[field]] !== undefined ? String(excelRow[mapping[field]]).trim() : '';
+        const rawVal = excelRow[mapping[field]] !== undefined ? excelRow[mapping[field]] : '';
+        // Preserve multi-line text (Excel Alt+Enter → \n)
+        const raw = String(rawVal).trim();
         if (numFields.has(field)) {
           const n = Number(raw.replace(/[,\s]/g, ''));
           values[field] = raw === '' ? null : Number.isFinite(n) ? n : null;
         } else {
+          // OperationLog: preserve newlines, keep raw text as-is
           values[field] = raw === '' ? '' : raw;
         }
       }
@@ -467,7 +485,7 @@ export default function WellDetailsPage() {
       reader.onload = () => processAOA(parseCSV(String(reader.result || '')));
       reader.onerror = () => setImportError('Failed to read CSV file');
       reader.readAsText(file);
-    } else if (ext === 'xlsx' || ext === 'xls') {
+    } else if (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm') {
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
@@ -953,8 +971,8 @@ export default function WellDetailsPage() {
                 <h3 style={{ margin: 0, color: '#9bb1ff' }}>Import Values from Excel / CSV</h3>
                 <p style={{ margin: 0, color: '#b0b7c3', fontSize: 13 }}>Upload your DTC Data Excel file. The system will automatically detect the Date, Planned Depth, Actual Depth, Progress, and Operation Log columns and match rows by date.</p>
                 <div>
-                  <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>File (CSV, XLSX, XLS)</label>
-                  <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleImportFile} style={{ width: '100%' }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>File (CSV, XLSX, XLS, XLSM)</label>
+                  <input type="file" accept=".csv,text/csv,.xlsx,.xls,.xlsm" onChange={handleImportFile} style={{ width: '100%' }} />
                   {fileName && <div style={{ fontSize: 12, color: '#bbb', marginTop: 6 }}>📄 {fileName}</div>}
                 </div>
                 {importError && <div style={{ color: '#ff8a80', fontSize: 13 }}>{importError}</div>}
