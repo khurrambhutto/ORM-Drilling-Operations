@@ -318,18 +318,19 @@ export default function WellDetailsPage() {
 
   // Auto-detect which column maps to each app field
   function autoDetectMapping(aoa) {
-    // Scan first 15 rows for header candidates
-    const scanRows = Math.min(15, aoa.length);
+    // Scan first 25 rows for header candidates (DTC sheets have 3-4 header rows + merged cells)
+    const headerScanRows = Math.min(25, aoa.length);
+    // Get total column count from the ENTIRE sheet (not just header rows)
     let colCount = 0;
-    for (let r = 0; r < scanRows; r++) colCount = Math.max(colCount, (aoa[r] || []).length);
+    for (let r = 0; r < aoa.length; r++) colCount = Math.max(colCount, (aoa[r] || []).length);
 
-    // Build per-column best header label
+    // Build per-column best header label (longest text found in header rows)
     const colLabels = [];
     for (let c = 0; c < colCount; c++) {
       const texts = [];
-      for (let r = 0; r < scanRows; r++) {
+      for (let r = 0; r < headerScanRows; r++) {
         const v = aoa[r] && aoa[r][c] ? String(aoa[r][c]).trim() : '';
-        if (v && /[a-zA-Z]/.test(v)) texts.push(v);
+        if (v && /[a-zA-Z]/.test(v) && v.length > 1) texts.push(v);
       }
       colLabels.push(texts.length ? texts.sort((a,b) => b.length - a.length)[0] : `Col ${c+1}`);
     }
@@ -338,7 +339,7 @@ export default function WellDetailsPage() {
       Date: ['report date', 'date', 'reportdate', 'report_date', 'dt', 'dated'],
       PlannedDepth: ['planned depth', 'planneddepth', 'planned', 'p depth', 'sim depth', 'planned m', 'planed depth', 'sim'],
       ActualDepth: ['actual depth', 'actualdepth', 'actual', 'a depth', 'depth m', 'cum depth', 'cumulative depth', 'gurgalot', 'depth(m)'],
-      // NOTE: do NOT put 'daily' here — it will clash with 'DAILY OPERATIONS'
+      // NOTE: do NOT put 'daily' alone here — it will clash with 'DAILY OPERATIONS'
       Progress: ['daily progress', 'progress', 'drlg', 'drld today', 'mddrld', 'metres drilled', 'daily prog'],
       // All known variants of the operations log column in DTC / ORM Excel sheets
       OperationLog: [
@@ -352,14 +353,14 @@ export default function WellDetailsPage() {
         'operations last 24',
         'daily ops',
         'remarks',
-        'log',
         'operations',
       ],
     };
 
     const mapping = { Date: null, PlannedDepth: null, ActualDepth: null, Progress: null, OperationLog: null };
     const used = new Set();
-    // Priority order: Date first, then others
+
+    // --- PASS 1: Header-name matching ---
     for (const field of ['Date', 'PlannedDepth', 'ActualDepth', 'Progress', 'OperationLog']) {
       let best = { idx: null, score: 0 };
       for (let c = 0; c < colCount; c++) {
@@ -375,7 +376,65 @@ export default function WellDetailsPage() {
       }
       if (best.idx !== null && best.score > 0) { mapping[field] = best.idx; used.add(best.idx); }
     }
-    return { mapping, colLabels };
+
+    // --- PASS 2: Content-based fallback for OperationLog ---
+    // If still not found, find the column with the longest average text in data rows
+    // (the operations narrative is always the longest text column by far)
+    if (mapping.OperationLog === null) {
+      // Find where data rows start (first row where any cell has a number or parseable date)
+      let dataStart = headerScanRows;
+      for (let r = 0; r < Math.min(30, aoa.length); r++) {
+        const row = aoa[r] || [];
+        const hasData = row.some(v => {
+          const s = String(v || '').trim();
+          return s !== '' && !isNaN(Number(s.replace(/,/g, '')));
+        });
+        if (hasData) { dataStart = r; break; }
+      }
+      // Scan up to 20 data rows, compute average text length per column
+      const sampleRows = aoa.slice(dataStart, dataStart + 20);
+      let bestTextCol = { idx: null, avgLen: 0 };
+      for (let c = 0; c < colCount; c++) {
+        if (used.has(c)) continue;
+        const lengths = sampleRows
+          .map(r => String((r && r[c]) || '').trim().length)
+          .filter(l => l > 0);
+        if (!lengths.length) continue;
+        const avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+        if (avg > bestTextCol.avgLen) bestTextCol = { idx: c, avgLen: avg };
+      }
+      // Only use as OperationLog if average length > 30 chars (it's definitely a narrative)
+      if (bestTextCol.idx !== null && bestTextCol.avgLen > 30) {
+        mapping.OperationLog = bestTextCol.idx;
+        used.add(bestTextCol.idx);
+      }
+    }
+
+    // --- PASS 3: Content-based fallback for Date ---
+    // If Date not found, pick column with most parseable date values in data rows
+    if (mapping.Date === null) {
+      let bestDateCol = { idx: null, count: 0 };
+      const sampleRows = aoa.slice(0, Math.min(30, aoa.length));
+      for (let c = 0; c < colCount; c++) {
+        if (used.has(c)) continue;
+        const dateCount = sampleRows.filter(r => parseExcelDate((r && r[c]) || '')).length;
+        if (dateCount > bestDateCol.count) bestDateCol = { idx: c, count: dateCount };
+      }
+      if (bestDateCol.idx !== null && bestDateCol.count >= 2) {
+        mapping.Date = bestDateCol.idx;
+        used.add(bestDateCol.idx);
+      }
+    }
+
+    // Determine data start row for downstream usage
+    let dataStartRow = 0;
+    if (mapping.Date !== null) {
+       for (let r = 0; r < Math.min(30, aoa.length); r++) {
+         if (parseExcelDate(aoa[r] && aoa[r][mapping.Date])) { dataStartRow = r; break; }
+       }
+    }
+
+    return { mapping, colLabels, dataStartRow };
   }
 
   // Build matches: join Excel rows to app rows by date
